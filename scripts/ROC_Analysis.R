@@ -1,4 +1,11 @@
 
+# Load Necessary Libraries 
+
+library(ROCR)
+library(ggplot2)
+library(caret)
+
+
 rocdata <- function(grp, pred){
   # Author: Kate Nambiar 
   # Date: 3/21/12
@@ -55,7 +62,7 @@ rocdata <- function(grp, pred){
 
 
 genSample <- function(n = 1000, threshold = 0.5, positive_percent = 0.50, 
-                      true_positive_percent = 0.90, true_negative_percent = 0.9){
+                      true_positive_percent = 0.9, true_negative_percent = 0.9){
 # creates a martix of truth values and predicted values 
 # for AUC analysis 
 
@@ -64,27 +71,27 @@ genSample <- function(n = 1000, threshold = 0.5, positive_percent = 0.50,
     above_threshold = threshold+0.00001 # gives us an above threshold number for cut off 
     negative_percent = 1 - positive_percent # False Percentage - The percentage of the sample N which is marked Negative (Default 0.5 observations)
     
-    true_positive = n * true_positive_percent # True Positvive 
+    true_positive = n * positive_percent # True Positvive 
     false_positive = n * (1 - true_positive_percent) # False Positive - Truth (Label) (Default 25 Observations)
-    
+ 
     true_negative <- n * negative_percent 
     false_negative <- n * (1 - true_negative_percent)
-    
+
     
     # Positive labels 
     true_positive_label <- rep(1, true_positive)
-    false_positive_label <- rep(0, false_positive)
+    false_positive_label <- rep(1, false_positive)
     true_positive_percentage = runif(true_positive, threshold, 1.0)
-    false_positive_percentage = runif(false_positive, below_threshold, 1.0)
+    false_positive_percentage = runif(false_positive, 0, below_threshold)
     truth_1 <- c(true_positive_label, false_positive_label)
     pred_1 <- c(true_positive_percentage, false_positive_percentage)
     positive <- cbind(truth_1, pred_1)
     
     # Negative numbers 
     true_negative_label <- rep(0, true_negative)
-    false_negative_label <- rep(1, false_negative)
+    false_negative_label <- rep(0, false_negative)
     true_negative_percentage <- runif(true_negative, 0.0, below_threshold)
-    false_negative_percentage <- runif(false_negative, 0.0, above_threshold)
+    false_negative_percentage <- runif(false_negative, above_threshold, 1)
     truth_2 <- c(true_negative_label, false_negative_label)
     pred_2 <- c(true_negative_percentage, false_negative_percentage) 
     negative <- cbind(truth_2, pred_2)
@@ -101,24 +108,23 @@ genSample <- function(n = 1000, threshold = 0.5, positive_percent = 0.50,
 #
 
 
-library(ROCR)
-library(ggplot2)
+
 
 # Generate with a 1:1 ratio 
 set.seed(1234)
-returnMatrix <- as.data.frame(genSample(threshold=0.75))
-rm_a <- returnMatrix 
-rocData <- as.data.frame(rocdata(returnMatrix$truth, returnMatrix$prediction))
+returnMatrix_1 <- as.data.frame(genSample())
+rm_a <- returnMatrix_1 
+rocData <- as.data.frame(rocdata(returnMatrix_1$truth, returnMatrix_1$prediction))
 auc <- signif(mean(rocData$stats.auc), 2)
-ptitle <- paste("ROC Graph with a 50% Concentration ~ AUC = ", auc)
+ptitle <- paste("ROC Graph with a 1:1 Concentration ~ AUC = ", auc)
 ggplot(rocData, aes(roc.x, roc.y)) + geom_line() + 
       annotate("segment", x=-Inf, xend=Inf,y=-Inf, yend=Inf, colour="red") + 
       ggtitle(ptitle) +
-      xlab("False Positive Rate") + ylab("True Positive Rate")
+      xlab("False Positive Rate (1-Specificity)") + ylab("True Positive Rate (Sensitivity)")
 
 
 # PRCurve 
-pred <- prediction(returnMatrix$prediction, returnMatrix$truth)
+pred <- prediction(returnMatrix_1$prediction, returnMatrix_1$truth)
 perf1 <- performance(pred, "prec", "rec")
 x <- unlist(perf1@x.values)
 y <- unlist(perf1@y.values)
@@ -134,11 +140,11 @@ ggplot(PR.data, aes(x,y)) + geom_line() +
 
 # ROC Graph 
 set.seed(1234)
-returnMatrix <- as.data.frame(genSample(positive_percent = 0.02, threshold=0.75, true_negative_percent = 0.9)) 
-rm_b <- returnMatrix
-rocData <- as.data.frame(rocdata(returnMatrix$truth, returnMatrix$prediction))
+returnMatrix_2 <- as.data.frame(genSample(positive_percent = 0.25)) 
+rm_b <- returnMatrix_2
+rocData <- as.data.frame(rocdata(returnMatrix_2$truth, returnMatrix_2$prediction))
 auc <- signif(mean(rocData$stats.auc), 2)
-ptitle <- paste("ROC Graph with 2% Concentration ~ AUC = ", auc)
+ptitle <- paste("ROC Graph with 1:10 Concentration ~ AUC = ", auc)
 ggplot(rocData, aes(roc.x, roc.y)) + geom_line() + 
   annotate("segment", x=-Inf, xend=Inf,y=-Inf, yend=Inf, colour="red") + 
   ggtitle(ptitle) +
@@ -146,7 +152,7 @@ ggplot(rocData, aes(roc.x, roc.y)) + geom_line() +
 
 
 # PRCurve 
-pred <- prediction(returnMatrix$prediction, returnMatrix$truth)
+pred <- prediction(returnMatrix_2$prediction, returnMatrix_2$truth)
 perf1 <- performance(pred, "prec", "rec")
 x <- unlist(perf1@x.values)
 y <- unlist(perf1@y.values)
@@ -163,8 +169,6 @@ ggplot(PR.data, aes(x,y)) + geom_line() +
 
 pred <- prediction(rm_a$prediction, rm_a$truth)
 perf1 <- performance(pred, "prec")
-#plot(perf1, main="Precision 1:1")
-#abline(v=0.75, col="red")
 x <- unlist(perf1@x.values)
 y <- unlist(perf1@y.values)
 PR.data1 <- as.data.frame(cbind(x,y))
@@ -172,8 +176,6 @@ PR.data1 <- as.data.frame(cbind(x,y))
 
 pred <- prediction(rm_b$prediction, rm_b$truth)
 perf2 <- performance(pred, "prec")
-#plot(perf2, main="Precision 1:10")
-#abline(v=0.75, col="red")
 x <- unlist(perf2@x.values)
 y <- unlist(perf2@y.values)
 PR.data2 <- as.data.frame(cbind(x,y))
@@ -193,6 +195,17 @@ err.plot <- ggplot(precision.err, aes(x)) +
 err.plot
 
 
+# Scripts to create confusion matrix 
+
+
+
+rm_a$truth[rm_a$truth == "1"] <- "T"
+rm_a$truth[rm_a$truth == "0"] <- "F"
+table(rm_a$prediction > 0.5, rm_a$truth)
+
+rm_b$truth[rm_a$truth == "1"] <- "T"
+rm_b$truth[rm_a$truth == "0"] <- "F"
+table(rm_b$prediction > 0.5, rm_b$truth)
 
 
 
